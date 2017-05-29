@@ -48,17 +48,17 @@ void alph_and_num_order(string f1, string f2){
     for (words_iter = counting_words.begin(); words_iter != counting_words.end(); words_iter++) {
         f_in_alph_order << words_iter->first << "   " << words_iter->second << endl;
     }
+    f_in_alph_order.close();
+
 
 
     vector<pair<string, int>> vector_of_pairs = toVector(counting_words);
     sort(vector_of_pairs.begin(), vector_of_pairs.end(), diff_func);
 
-    // TODO
     for (pair<string, int> item: vector_of_pairs){
         f_in_num_order << item.first<< "    " << item.second;
     }
 
-    f_in_alph_order.close();
     f_in_num_order.close();
 }
 
