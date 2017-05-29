@@ -26,7 +26,7 @@ bool diff_func(const pair<string, int> &a, const pair<string, int> &b){
 
 vector<pair<string, int>> toVector(map<string, int> mp) {
     vector<pair<string, int>> words_vector;
-    for (size_t map_iter = mp.begin(); map_iter != mp.end(); ++map_iter) {
+    for (auto map_iter = mp.begin(); map_iter != mp.end(); ++map_iter) {
         words_vector.push_back(make_pair(map_iter-> first, map_iter-> second));
     }
     return words_vector;
@@ -39,7 +39,7 @@ void alph_and_num_order(string f1, string f2){
     f_in_alph_order.open(f1);
     f_in_num_order.open(f2);
 
-    for (size_t words_iter = counting_words.begin(); words_iter != counting_words.end(); ++words_iter) {
+    for (auto words_iter = counting_words.begin(); words_iter != counting_words.end(); ++words_iter) {
         f_in_alph_order << words_iter->first << "\t" << words_iter->second << endl;
     }
     f_in_alph_order.close();
