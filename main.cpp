@@ -6,7 +6,6 @@
 #include <mutex>
 #include <thread>
 #include <vector>
-
 #include "measuring_time.h"
 #include <condition_variable>
 #include <atomic>
@@ -14,7 +13,7 @@
 #include <ctype.h>
 
 using namespace std;
-mutex mx, mx_2;
+mutex mx, mx_2, mx_3;
 map<string, int> all_counted;
 condition_variable cv;
 atomic <bool> finished = {false};
@@ -60,7 +59,7 @@ map<string, string> read_config(string filename) {
         myfile.close();
     }
     else {
-        cerr << "Error with opening the file!" << endl;
+        cout << "Error with opening the file!" << endl;
     }
     return mp;
 };
@@ -93,7 +92,7 @@ void data_producer(const string &file_name){
         int num_of_lines = 0;
         while (f >> line){
             all_lines.push_back(line);
-            if (size_of_block != num_of_lines){
+            if (size_of_block != num_of_lines + 1){
                 ++num_of_lines;
             }
             else {
@@ -106,9 +105,10 @@ void data_producer(const string &file_name){
                 num_of_lines = 0;
             }
         }
+
         if (all_lines.size() != 0){
             {
-                lock_guard<mutex> locker(mx);
+                lock_guard<mutex> locker(mx_3);
                 queue_of_vects.push_back(all_lines);
             }
             cv.notify_one();
@@ -132,11 +132,11 @@ void data_consumer(){
             vector<string> data = queue_of_vects.front();
             queue_of_vects.pop_front();
             locker.unlock();
-            for(size_t i = 0; i < data.size(); ++i){
-                check_word(data[i]);
-                if (!data[i].empty()) {
+            for(auto i : data) {
+                check_word(i);
+                if (!i.empty()) {
                     lock_guard<mutex> lockGuard(mx_2);
-                    ++all_counted[data[i]];
+                    ++all_counted[i];
                 }
             }
         }
@@ -146,7 +146,7 @@ void data_consumer(){
 int main(){
     string filename;
     cout << "Please enter name of configuration file with extension '.txt':>";
-    cin >> filename;
+    cin >> filename;    // config.txt
     auto start_time = get_current_time_fenced();
     map<string, string> mp = read_config(filename);
     
