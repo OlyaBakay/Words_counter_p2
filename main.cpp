@@ -14,8 +14,8 @@
 #include <ctype.h>
 
 using namespace std;
-mutex mtx, mtx_2;
-map<string, int> counting_words, final_count;
+mutex mx, mx_2;
+map<string, int> all_counted;
 condition_variable cv;
 atomic <bool> finished = {false};
 deque<vector<string>> queue_of_vects;
@@ -24,33 +24,21 @@ bool diff_func(const pair<string, int> &a, const pair<string, int> &b){
     return a.second < b.second;
 }
 
-vector<pair<string, int>> toVector(map<string, int> mp) {
-    vector<pair<string, int>> words_vector;
-    for (auto map_iter = mp.begin(); map_iter != mp.end(); ++map_iter) {
-        words_vector.push_back(make_pair(map_iter-> first, map_iter-> second));
-    }
-    return words_vector;
-}
+void alph_num_order(string f1, string f2) {
+    ofstream f_a;
+    f_a.open(f1);
+    for (auto el : all_counted) f_a << el.first << " - " << el.second << endl;
+    f_a.close();
 
-void alph_and_num_order(string f1, string f2){
-    ofstream f_in_alph_order;
-    ofstream f_in_num_order;
-
-    f_in_alph_order.open(f1);
-    f_in_num_order.open(f2);
-
-    for (auto words_iter = counting_words.begin(); words_iter != counting_words.end(); ++words_iter) {
-        f_in_alph_order << words_iter->first << "\t" << words_iter->second << endl;
-    }
-    f_in_alph_order.close();
-
-    vector<pair<string, int>> vector_of_pairs = toVector(counting_words);
+    vector<pair<string, int> > vector_of_pairs(all_counted.begin(), all_counted.end());
     sort(vector_of_pairs.begin(), vector_of_pairs.end(), diff_func);
-
+    ofstream f_n;
+    f_n.open(f2);
     for (pair<string, int> item: vector_of_pairs){
-        f_in_num_order << item.first << "\t" << item.second;
+        f_n << item.first << " - " << item.second << endl;
     }
-    f_in_num_order.close();
+    f_n.close();
+
 }
 
 map<string, string> read_config(string filename) {
@@ -72,7 +60,7 @@ map<string, string> read_config(string filename) {
         myfile.close();
     }
     else {
-        cout << "Error with opening the file!" << endl;
+        cerr << "Error with opening the file!" << endl;
     }
     return mp;
 };
@@ -85,29 +73,42 @@ T get_param(string key, map<string, string> myMap) {
     return val;
 }
 
+void check_word(string& word) {
+    string new_word = "";
+    transform(word.begin(), word.end(), word.begin(), ::tolower);
+    for (auto i : word) {
+        if (!ispunct(i) && !isdigit(i)) {
+            new_word += i;
+        }
+    }
+    word = new_word;
+}
+
 void data_producer(const string &file_name){
     fstream f(file_name);
     if(f.is_open()){
         string line;
-        int size_of_block = 25;
+        int size_of_block = 50;
         vector<string> all_lines;
-
-        while (getline(f, line)){
-            int num_of_lines = 0;
+        int num_of_lines = 0;
+        while (f >> line){
             all_lines.push_back(line);
-            while (size_of_block > num_of_lines){
-                num_of_lines++;
+            if (size_of_block != num_of_lines){
+                ++num_of_lines;
             }
+            else {
                 {
-                    lock_guard<mutex> locker(mtx);
+                    lock_guard<mutex> locker(mx);
                     queue_of_vects.push_back(all_lines);
                 }
-            cv.notify_one();
-            all_lines.clear();
+                cv.notify_one();
+                all_lines.clear();
+                num_of_lines = 0;
+            }
         }
         if (all_lines.size() != 0){
             {
-                lock_guard<mutex> locker(mtx);
+                lock_guard<mutex> locker(mx);
                 queue_of_vects.push_back(all_lines);
             }
             cv.notify_one();
@@ -122,7 +123,7 @@ void data_producer(const string &file_name){
 
 void data_consumer(){
     while(!finished){
-        unique_lock<mutex> locker(mtx);
+        unique_lock<mutex> locker(mx);
         if(queue_of_vects.empty()){
             cv.wait(locker);
         }
@@ -132,17 +133,10 @@ void data_consumer(){
             queue_of_vects.pop_front();
             locker.unlock();
             for(size_t i = 0; i < data.size(); ++i){
-                string new_word = "";
-                transform(data[i].begin(), data[i].end(), data[i].begin(), ::tolower);
-                for (size_t j = 0; j < data[i].size(); ++j){
-                    if (isalpha(data[i][j])) {
-                        new_word += data[i][j];
-                    }
-                }
-                data[i] = new_word;
+                check_word(data[i]);
                 if (!data[i].empty()) {
-                    lock_guard<mutex> lockGuard(mtx_2);
-                    ++final_count[data[i]];
+                    lock_guard<mutex> lockGuard(mx_2);
+                    ++all_counted[data[i]];
                 }
             }
         }
@@ -151,37 +145,34 @@ void data_consumer(){
 
 int main(){
     string filename;
-    cout << "Please enter name of configuration file with extension '.txt':>\t";
+    cout << "Please enter name of configuration file with extension '.txt':>";
     cin >> filename;
+    auto start_time = get_current_time_fenced();
     map<string, string> mp = read_config(filename);
-    string infile, out_by_a, out_by_n;
-    int num_of_threads;
-    if (mp.size() != 0) {
-        auto start_time = get_current_time_fenced();
-        infile = get_param<string>("infile", mp);
-        out_by_a = get_param<string>("out_by_a", mp);
-        out_by_n = get_param<string>("out_by_n", mp);
-        num_of_threads = get_param<int>("threads", mp);
+    
+    if (!mp.empty()) {
+        string infile = get_param<string>("infile", mp);
+        string out_by_a = get_param<string>("out_by_a", mp);
+        string out_by_n = get_param<string>("out_by_n", mp);
+        int num_thr = get_param<int>("threads", mp);
 
         auto start_reading = get_current_time_fenced();
         thread thr = thread(data_producer, infile);
-
-        auto start_thr = get_current_time_fenced();
-        thread num_of_thread[num_of_threads];
-        for (int i = 0; i < num_of_threads; ++i){
-            num_of_thread[i] = thread(data_consumer);
-        }
-        thr.join();
         auto finish_reading = get_current_time_fenced();
 
-        for (int j = 0; j < num_of_threads; ++j){
-            num_of_thread[j].join();
+        auto start_thr = get_current_time_fenced();
+        thread threads[num_thr];
+        for (int i = 0; i < num_thr; ++i){
+            threads[i] = thread(data_consumer);
         }
-
+        thr.join();
+        
+        for (int j = 0; j < num_thr; ++j){
+            threads[j].join();
+        }
         auto finish_thr = get_current_time_fenced();
-
-        alph_and_num_order(out_by_a, out_by_n);
-
+        all_counted.erase("");
+        alph_num_order(out_by_a, out_by_n);
         auto final_time = get_current_time_fenced();
 
         chrono::duration<double, milli> total_time = final_time - start_time;
